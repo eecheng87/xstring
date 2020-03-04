@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
 typedef union {
     /* allow strings up to 15 bytes to stay on the stack
      * use the last byte as a null terminator and to store flags
@@ -241,21 +242,58 @@ xs *xs_cpy(xs *dest, xs *src){
     return dest;
 }
 
+char *xs_strtok(char *x, const char *delimit)
+{
+    static char *lastToken = NULL; /* UNSAFE SHARED STATE! */
+    char *tmp;
+    /* Skip leading delimiters if new string. */
+    if ( x == NULL ) {
+        x = lastToken;
+        if (x == NULL)         /* End of story? */
+            return NULL;
+    } else {
+        x += strspn(x, delimit);
+    }
+    /* Find end of segment */
+    tmp = strpbrk(x, delimit);
+    if (tmp) {
+        /* Found another delimiter, split string and save state. */
+        *tmp = '\0';
+        lastToken = tmp + 1;
+    } else {
+        /* Last segment, remember that. */
+        lastToken = NULL;
+    }
+    return x;
+}
+
+
 int main()
 {
+
+    /* Testing xs_strtok */
+    xs str = *xs_new(&str,"asd:aee:gdw:tfv:ddd");
+    char *pch = strtok(xs_data(&str) ,":");
+    while (pch != NULL)
+    {
+        printf ("%s ",pch);
+        pch = strtok (NULL, ":");
+    }
+    printf("\n");
+
     //xs string = *xs_tmp("\n foobarbar \n\n\n");
     //xs_trim(&string, "\n ");
-    xs prefix = *xs_tmp("((((((("), suffix = *xs_tmp("))))))))))))");
+    /*xs prefix = *xs_tmp("((((((("), suffix = *xs_tmp("))))))))))))");
     xs string = *xs_new(&string,"aoaoaoaofoobarbar");
     xs_concat(&string, &prefix, &suffix);
     xs string_cpy = *xs_cpy(&xs_literal_empty(),&string);
-    xs_trim(&string_cpy,"(");
+    xs_trim(&string_cpy,"(");*/
     //xs hihi = *xs_cpy(&xs_literal_empty(),&string);
     //xs qq = *xs_cpy(&xs_literal_empty(),&hihi);
 
     //xs_concat(&string_cpy, &prefix, &suffix);
-    printf("[%s] : %2zu\n", xs_data(&string_cpy), xs_size(&string_cpy));
-    printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
+    //printf("[%s] : %2zu\n", xs_data(&string_cpy), xs_size(&string_cpy));
+    //printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
     //printf("%d\n",*string.refcnt);
     //printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
     /*xs string = *xs_tmp("\n foobarbar \n\n\n");
