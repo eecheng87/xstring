@@ -30,6 +30,7 @@ typedef union {
             /* capacity is always a power of 2 (unsigned)-1 */
             capacity : 6;
         /* the last 4 bits are important flags */
+        int *refcnt;
     };
 } xs;
 
@@ -122,6 +123,16 @@ xs *xs_concat(xs *string, const xs *prefix, const xs *suffix)
          *data = xs_data(string);
 
     if (size + pres + sufs <= capacity) {
+        if(string->flag1 && string->refcnt && *(string->refcnt) > 0){
+            /* create new space */
+            *(string->refcnt) -= 1;
+            string->flag1 = false;
+            data = string->ptr = (char*)malloc(sizeof(char) * capacity);
+            if(*(string->refcnt) == 0){
+                free(string->refcnt);
+                string->refcnt = NULL;
+            }
+        }
         memmove(data + pres, data, size);
         memcpy(data, pre, pres);
         memcpy(data + pres + size, suf, sufs + 1);
@@ -133,8 +144,17 @@ xs *xs_concat(xs *string, const xs *prefix, const xs *suffix)
         memcpy(tmpdata + pres, data, size);
         memcpy(tmpdata, pre, pres);
         memcpy(tmpdata + pres + size, suf, sufs + 1);
-        xs_free(string);
-        
+        if(string->flag1 && string->refcnt && *(string->refcnt) > 0){
+            *(string->refcnt) -= 1;
+            if(*(string->refcnt) == 0){
+                free(string->refcnt);
+                string->refcnt = NULL;
+            }
+        }else
+        {
+            xs_free(string);
+        }
+        tmps.flag1 = false;
         *string = tmps;
         string->size = size + pres + sufs;
     }
@@ -171,6 +191,14 @@ xs *xs_trim(xs *x, const char *trimset)
      * Do not reallocate immediately. Instead, reuse it as possible.
      * Do not shrink to in place if < 16 bytes.
      */
+    if(x->flag1 && x->refcnt && *(x->refcnt) > 0){
+        x->ptr = orig = (char*)malloc(sizeof(char) * strlen(x->ptr));
+        *(x->refcnt) -= 1;
+        if(*(x->refcnt) == 0){
+            free(x->refcnt);
+            x->refcnt = NULL;
+        }
+    }
     memmove(orig, dataptr, slen);
     /* do not dirty memory unless it is needed */
     if (orig[slen])
@@ -180,15 +208,63 @@ xs *xs_trim(xs *x, const char *trimset)
         x->size = slen;
     else
         x->space_left = 15 - slen;
+
     return x;
 #undef check_bit
 #undef set_bit
 }
 
+xs *xs_cpy(xs *dest, xs *src){
 
+    if (xs_is_ptr(src)){
+        /* string is on heap */
+        dest->is_ptr = true;
+        dest->ptr = src->ptr;
+        dest->flag1 = true;
+        /*
+        Remind: don't use strlen(src->data) as r-value
+        */
+        dest->size = xs_size(src);
+        if(!src->refcnt){
+            dest->refcnt = src->refcnt = (int*)malloc(sizeof(int));
+            *(dest->refcnt) = 1;
+        }else{
+            dest->refcnt = src->refcnt;
+            *(dest->refcnt) += 1;
+        }
+    } else {
+        /* string is on stack */
+        memcpy(dest->data, src->data , xs_size(src));
+        dest->is_ptr = false;
+        dest->space_left = 15 - xs_size(src);
+    }
+    return dest;
+}
 
 int main()
 {
-    
+    //xs string = *xs_tmp("\n foobarbar \n\n\n");
+    //xs_trim(&string, "\n ");
+    xs prefix = *xs_tmp("((((((("), suffix = *xs_tmp("))))))))))))");
+    xs string = *xs_new(&string,"aoaoaoaofoobarbar");
+    xs_concat(&string, &prefix, &suffix);
+    xs string_cpy = *xs_cpy(&xs_literal_empty(),&string);
+    xs_trim(&string_cpy,"(");
+    //xs hihi = *xs_cpy(&xs_literal_empty(),&string);
+    //xs qq = *xs_cpy(&xs_literal_empty(),&hihi);
+
+    //xs_concat(&string_cpy, &prefix, &suffix);
+    printf("[%s] : %2zu\n", xs_data(&string_cpy), xs_size(&string_cpy));
+    printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
+    //printf("%d\n",*string.refcnt);
+    //printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
+    /*xs string = *xs_tmp("\n foobarbar \n\n\n");
+    xs_trim(&string, "\n ");
+    printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
+    */
+    /*xs prefix = *xs_tmp("((("), suffix = *xs_tmp(")))");
+    xs_concat(&string, &prefix, &suffix);
+    printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
+    */
     return 0;
 }
